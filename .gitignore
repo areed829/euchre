@@ -1,0 +1,7 @@
+# macOS
+.DS_Store
+
+# Editor / tooling local config
+.claude/
+.vscode/
+*.log

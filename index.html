@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Euchre Trainer</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">♠ Euchre Trainer ♥</div>
+    <div class="topbar-controls">
+      <label class="ctl">
+        Difficulty
+        <select id="difficulty">
+          <option value="easy">Easy</option>
+          <option value="medium" selected>Medium</option>
+          <option value="hard">Hard (Monte Carlo)</option>
+        </select>
+      </label>
+      <div class="scorebox">
+        <span class="team-ns">You + Partner <strong id="score-ns">0</strong></span>
+        <span class="divider">·</span>
+        <span class="team-ew">Opponents <strong id="score-ew">0</strong></span>
+        <span class="target">to <span id="score-target">10</span></span>
+      </div>
+      <button id="new-game" class="btn ghost">New Game</button>
+    </div>
+  </header>
+
+  <main class="table-wrap">
+    <div class="table" id="table">
+      <!-- Seats -->
+      <div class="seat seat-north" id="seat-north"></div>
+      <div class="seat seat-west" id="seat-west"></div>
+      <div class="seat seat-east" id="seat-east"></div>
+      <div class="seat seat-south" id="seat-south"></div>
+
+      <!-- Center: trick area / up-card / trump -->
+      <div class="center" id="center">
+        <div class="trump-indicator" id="trump-indicator"></div>
+        <div class="trick-area" id="trick-area"></div>
+        <div class="center-msg" id="center-msg"></div>
+      </div>
+    </div>
+
+    <!-- Your hand -->
+    <div class="hand-zone">
+      <div class="hand" id="my-hand"></div>
+    </div>
+
+    <!-- Action bar: bidding buttons / prompts -->
+    <div class="action-bar" id="action-bar"></div>
+  </main>
+
+  <aside class="log-panel">
+    <div class="log-header">
+      <span>Table Log</span>
+      <button id="hint-btn" class="btn small" title="Get a hint for your current decision">💡 Hint</button>
+    </div>
+    <ul class="log" id="log"></ul>
+  </aside>
+
+  <div class="modal-backdrop" id="modal-backdrop" hidden>
+    <div class="modal" id="modal"></div>
+  </div>
+
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>
