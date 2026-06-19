@@ -94,6 +94,71 @@ export function finalizeGame(gameId, won) {
 
 export function resetStats() { persist(fresh()); }
 
+// ---- Export / import ----------------------------------------------------
+
+/** The full persisted stats object, for download/backup. */
+export function exportData() {
+  return load();
+}
+
+/** Check an imported object looks like our stats. Returns { ok, error?, games, graded }. */
+export function validateStats(obj) {
+  if (!obj || typeof obj !== 'object') return { ok: false, error: 'That file is not a stats backup.' };
+  if (obj.version !== 1) return { ok: false, error: 'Unsupported or missing stats version.' };
+  if (!obj.totals || typeof obj.totals !== 'object') return { ok: false, error: 'The file is missing its totals.' };
+  return { ok: true, games: Array.isArray(obj.games) ? obj.games.length : 0, graded: Number(obj.totals.graded) || 0 };
+}
+
+// Rebuild a clean, well-formed stats object from possibly-partial input.
+function sanitize(obj) {
+  const base = fresh();
+  for (const k of Object.keys(base.totals)) base.totals[k] = Number(obj.totals?.[k]) || 0;
+  for (const [name, c] of Object.entries(obj.categories || {})) {
+    if (!c) continue;
+    base.categories[name] = { graded: Number(c.graded) || 0, good: Number(c.good) || 0, lossSum: Number(c.lossSum) || 0 };
+  }
+  for (const [tag, v] of Object.entries(obj.leaks || {})) {
+    if (!v) continue;
+    base.leaks[tag] = { count: Number(v.count) || 0, label: String(v.label || tag) };
+  }
+  if (Array.isArray(obj.games)) {
+    base.games = obj.games.slice(-80).map((g) => ({
+      gameId: g.gameId, ts: Number(g.ts) || 0,
+      graded: Number(g.graded) || 0, good: Number(g.good) || 0, lossSum: Number(g.lossSum) || 0,
+      won: g.won === true ? true : g.won === false ? false : null,
+    }));
+  }
+  return base;
+}
+
+function mergeInto(base, add) {
+  for (const k of Object.keys(base.totals)) base.totals[k] += add.totals[k] || 0;
+  for (const [name, c] of Object.entries(add.categories)) {
+    const b = (base.categories[name] ||= { graded: 0, good: 0, lossSum: 0 });
+    b.graded += c.graded; b.good += c.good; b.lossSum += c.lossSum;
+  }
+  for (const [tag, v] of Object.entries(add.leaks)) {
+    const b = (base.leaks[tag] ||= { count: 0, label: v.label });
+    b.count += v.count;
+  }
+  base.games.push(...add.games);
+  if (base.games.length > 80) base.games = base.games.slice(-80);
+  return base;
+}
+
+/**
+ * Apply imported stats. mode 'merge' adds to current stats; 'replace' overwrites.
+ * Throws if the object fails validation. Returns the new summary.
+ */
+export function importData(obj, mode = 'merge') {
+  const v = validateStats(obj);
+  if (!v.ok) throw new Error(v.error);
+  const clean = sanitize(obj);
+  const result = mode === 'replace' ? clean : mergeInto(load(), clean);
+  persist(result);
+  return getSummary();
+}
+
 /** Derived view for the UI. */
 export function getSummary() {
   const d = load();

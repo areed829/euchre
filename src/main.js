@@ -7,7 +7,10 @@ import {
   render, logLine, clearLog, showModal, hideModal, renderReview, renderStats,
 } from './ui.js';
 import { reviewHand, describeAction } from './coach.js';
-import { recordHand, finalizeGame, getSummary, resetStats } from './stats.js';
+import {
+  recordHand, finalizeGame, getSummary, resetStats,
+  exportData, importData, validateStats,
+} from './stats.js';
 import { SUIT_SYMBOLS, SUIT_NAMES, cardLabel } from './cards.js';
 import { SEAT_SHORT } from './rules.js';
 
@@ -215,12 +218,76 @@ async function reviewThenContinue(handNumber, resolve) {
 
 function showStats() {
   showModal(renderStats(getSummary()), [
-    { label: 'Reset stats', cls: 'ghost', onClick: () => {
-      resetStats();
-      showModal(renderStats(getSummary()), [{ label: 'Close', onClick: hideModal }], { wide: true });
-    } },
+    { label: 'Export', cls: 'ghost', onClick: exportStats },
+    { label: 'Import', cls: 'ghost', onClick: importStats },
+    { label: 'Reset', cls: 'ghost', onClick: confirmResetStats },
     { label: 'Close', onClick: hideModal },
   ], { wide: true });
+}
+
+function confirmResetStats() {
+  showModal('<h2>Reset all stats?</h2><p>This permanently clears your saved accuracy, leaks, and trend. Consider exporting a backup first.</p>', [
+    { label: 'Cancel', cls: 'ghost', onClick: showStats },
+    { label: 'Reset', onClick: () => { resetStats(); showStats(); } },
+  ]);
+}
+
+// Download the current stats as a JSON backup file.
+function exportStats() {
+  const data = exportData();
+  if (!data.totals.graded) { showStats(); logLine('Nothing to export yet — play a few hands first.', 'sys'); return; }
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `euchre-stats-${new Date().toISOString().slice(0, 10)}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+// Pick a backup file and merge or replace.
+function importStats() {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'application/json,.json';
+  input.addEventListener('change', async () => {
+    const file = input.files && input.files[0];
+    if (!file) return;
+    let obj;
+    try {
+      obj = JSON.parse(await file.text());
+    } catch {
+      return statsError('That file isn’t valid JSON.');
+    }
+    const check = validateStats(obj);
+    if (!check.ok) return statsError(check.error);
+    showModal(
+      `<h2>Import stats</h2><p>This backup has <strong>${check.games}</strong> game${check.games === 1 ? '' : 's'} and <strong>${check.graded}</strong> graded decisions.</p>
+       <p style="color:var(--muted)"><strong>Merge</strong> adds it to your current stats. <strong>Replace</strong> overwrites everything you have now.</p>`,
+      [
+        { label: 'Cancel', cls: 'ghost', onClick: showStats },
+        { label: 'Replace', cls: 'ghost', onClick: () => applyImport(obj, 'replace') },
+        { label: 'Merge', onClick: () => applyImport(obj, 'merge') },
+      ],
+    );
+  });
+  input.click();
+}
+
+function applyImport(obj, mode) {
+  try {
+    importData(obj, mode);
+    logLine(`Stats ${mode === 'merge' ? 'merged' : 'replaced'} from backup.`, 'good');
+  } catch (err) {
+    return statsError(String(err.message || err));
+  }
+  showStats();
+}
+
+function statsError(msg) {
+  showModal(`<h2>Import failed</h2><p>${msg}</p>`, [{ label: 'Back', onClick: showStats }]);
 }
 
 function handleGameOver() {

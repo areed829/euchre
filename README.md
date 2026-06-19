@@ -49,7 +49,11 @@ there's nothing to install.
 - **Hint** (💡) — on your turn, the EV-ranked best action with a confidence note.
 - **Stats** (📊) — best-play accuracy overall and by decision type (bidding,
   leading, following, discard), your most common leaks, and a per-game trend so
-  you can watch yourself improve. Saved locally in your browser.
+  you can watch yourself improve. Saved locally in your browser (`localStorage`
+  under `http://localhost:<port>`, so keep the same port between sessions).
+- **Export / Import** — download your stats as a JSON backup, then re-import to
+  restore them or to **merge** progress from another machine (Replace overwrites
+  instead). Use this if you ever clear browser data or switch browsers.
 
 ## Project layout
 
