@@ -159,6 +159,38 @@ function reasonFor(sim, kind, chosen, best) {
   return null;
 }
 
+/** Tag a non-best decision with a leak category for trend tracking. */
+function classifyLeak(kind, sim, chosen, best) {
+  if (kind === 'bid1' || kind === 'bid2') {
+    if (chosen.type === 'pass' && best.type !== 'pass') return ['underbid', 'Passed a callable hand'];
+    if (chosen.type !== 'pass' && best.type === 'pass') return ['overbid', 'Bid a thin hand'];
+    if (chosen.alone && !best.alone) return ['alone-greedy', 'Went alone too light'];
+    if (!chosen.alone && best.alone) return ['alone-missed', 'Missed a lone-hand chance'];
+    if (best.suit !== chosen.suit) return ['wrong-trump', 'Named the weaker trump'];
+    return ['bidding', 'Bidding decision'];
+  }
+  if (kind === 'discard') return ['discard', 'Suboptimal discard'];
+
+  const trump = sim.trump;
+  const plays = sim.currentTrick.plays;
+  if (plays.length === 0) {
+    const bestTrump = isTrump(best.card, trump);
+    const chosenTrump = isTrump(chosen.card, trump);
+    if (bestTrump && !chosenTrump) return ['lead-trump', 'Should have led trump'];
+    if (!bestTrump && best.card.rank === 'A') return ['lead-ace', 'Should have cashed an off-ace'];
+    if (chosenTrump && !bestTrump) return ['lead-waste-trump', 'Led trump needlessly'];
+    return ['lead', 'Lead choice'];
+  }
+  const winner = currentWinner(plays, trump);
+  const partnerWinning = winner && teamOf(winner.seat) === teamOf(HUMAN);
+  const led = effectiveSuit(plays[0].card, trump);
+  const chosenWins = trickValue(chosen.card, trump, led) > trickValue(winner.card, trump, led);
+  const bestWins = trickValue(best.card, trump, led) > trickValue(winner.card, trump, led);
+  if (!partnerWinning && bestWins && !chosenWins) return ['missed-winner', 'Let a winnable trick go'];
+  if (partnerWinning && chosenWins && isTrump(chosen.card, trump)) return ['overtook-partner', 'Wasted a card on partner’s trick'];
+  return ['follow', 'Follow choice'];
+}
+
 // ---- Hand review --------------------------------------------------------
 
 /**
@@ -189,8 +221,14 @@ export async function reviewHand(game, handNumber, evaluate, opts = {}) {
       const chosenEval = evals.find((e) => sameAction(e.action, logged.chosenAction)) || { ev: best.ev };
       const loss = Math.max(0, best.ev - chosenEval.ev);
       const grade = gradeFor(loss);
+      const isLead = decision.kind === 'play' ? sim.currentTrick.plays.length === 0 : undefined;
+      let tag = null, tagLabel = null;
+      if (grade.key !== 'good') {
+        [tag, tagLabel] = classifyLeak(decision.kind, sim, logged.chosenAction, best.action);
+      }
       reviews.push({
         kind: decision.kind,
+        isLead,
         context: contextLabel(sim, decision.kind),
         chosen: logged.chosenAction,
         chosenText: describeAction(logged.chosenAction),
@@ -203,6 +241,8 @@ export async function reviewHand(game, handNumber, evaluate, opts = {}) {
         gradeLabel: grade.label,
         reason: reasonFor(sim, decision.kind, logged.chosenAction, best.action),
         sameAsBest: sameAction(logged.chosenAction, best.action),
+        tag,
+        tagLabel,
       });
     }
     sim.applyAction(logged.chosenAction);

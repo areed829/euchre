@@ -279,3 +279,22 @@ select, .btn {
 .rev-reason { font-size: 13px; color: var(--muted); margin-top: 4px; line-height: 1.4; }
 .spinner { display: inline-block; width: 16px; height: 16px; border: 3px solid #3a424a; border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; vertical-align: middle; margin-right: 8px; }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* ---- Stats panel ---- */
+.log-header-btns { display: flex; gap: 6px; }
+.stats h3.stat-h { font-size: 13px; color: var(--muted); margin: 16px 0 8px; font-weight: 600; }
+.stat-big { display: flex; gap: 24px; margin: 8px 0 4px; }
+.stat-num { font-size: 26px; font-weight: 700; }
+.stat-lbl { font-size: 11px; color: var(--muted); }
+.cat-list { display: flex; flex-direction: column; gap: 7px; }
+.cat-row { display: flex; align-items: center; gap: 10px; font-size: 13px; }
+.cat-name { width: 80px; color: var(--text); }
+.cat-bar { flex: 1; height: 9px; background: #20262c; border-radius: 6px; overflow: hidden; }
+.cat-fill { height: 100%; border-radius: 6px; transition: width .3s; }
+.cat-val { width: 38px; text-align: right; font-variant-numeric: tabular-nums; }
+.cat-n { width: 46px; text-align: right; color: var(--muted); font-size: 11px; }
+.cat-n::before { content: ''; }
+.trend-svg { width: 100%; height: auto; background: var(--panel); border-radius: 8px; padding: 4px; }
+.leak-list { list-style: none; margin: 0; padding: 0; }
+.leak-list li { padding: 5px 0; border-bottom: 1px solid #20262c; font-size: 13px; }
+.leak-count { color: var(--bad); font-weight: 700; margin-right: 8px; }

@@ -4,9 +4,10 @@ import { EuchreGame } from './engine.js';
 import { aiAction, estimateTricks } from './ai/heuristic.js';
 import { mcMove, mcEvaluate } from './ai/mc-client.js';
 import {
-  render, logLine, clearLog, showModal, hideModal, renderReview,
+  render, logLine, clearLog, showModal, hideModal, renderReview, renderStats,
 } from './ui.js';
 import { reviewHand, describeAction } from './coach.js';
+import { recordHand, finalizeGame, getSummary, resetStats } from './stats.js';
 import { SUIT_SYMBOLS, SUIT_NAMES, cardLabel } from './cards.js';
 import { SEAT_SHORT } from './rules.js';
 
@@ -16,7 +17,24 @@ let difficulty = 'medium';
 let resolveHuman = null;
 let currentDecision = null;
 let currentHint = null;
-const sessionReviews = [];   // coaching reviews this game (for stats in Phase 4)
+let gameId = 0;
+const sessionReviews = [];          // coaching reviews this game
+const reviewCache = new Map();      // handNumber -> Promise<review>, computed once
+
+// Review a hand once; on completion, record it to session + persistent stats.
+function getHandReview(handNumber) {
+  if (!reviewCache.has(handNumber)) {
+    const gid = gameId;
+    const p = reviewHand(game, handNumber, mcEvaluate, { determinizations: 60 })
+      .then((r) => {
+        if (r) { sessionReviews.push(r); recordHand(r, gid); }
+        return r;
+      })
+      .catch((err) => { console.warn('Review failed:', err); return null; });
+    reviewCache.set(handNumber, p);
+  }
+  return reviewCache.get(handNumber);
+}
 
 const AI_DELAY = 600;
 const TRICK_PAUSE = 1150;
@@ -171,6 +189,8 @@ function handleHandOver() {
   logLine(handResultText(), cls);
   draw();
   const handNumber = game.handNumber;
+  // Kick off the review in the background so stats record even without a click.
+  if (!r.passedOut) getHandReview(handNumber);
   return new Promise((res) => {
     const cont = () => { hideModal(); res(); };
     const actions = [{ label: 'Continue', onClick: cont }];
@@ -187,21 +207,26 @@ function handleHandOver() {
 
 async function reviewThenContinue(handNumber, resolve) {
   showModal('<div class="review"><h2><span class="spinner"></span>Analyzing your hand…</h2><p style="color:var(--muted)">Running Monte Carlo on each of your decisions.</p></div>', [], { wide: true });
-  let review = null;
-  try {
-    review = await reviewHand(game, handNumber, mcEvaluate, { determinizations: 60 });
-    if (review) sessionReviews.push(review);
-  } catch (err) {
-    console.warn('Hand review failed:', err);
-  }
+  const review = await getHandReview(handNumber);   // reuses the background computation
   showModal(renderReview(review), [
     { label: 'Continue', onClick: () => { hideModal(); resolve(); } },
+  ], { wide: true });
+}
+
+function showStats() {
+  showModal(renderStats(getSummary()), [
+    { label: 'Reset stats', cls: 'ghost', onClick: () => {
+      resetStats();
+      showModal(renderStats(getSummary()), [{ label: 'Close', onClick: hideModal }], { wide: true });
+    } },
+    { label: 'Close', onClick: hideModal },
   ], { wide: true });
 }
 
 function handleGameOver() {
   const win = game.winningTeam();
   const won = win === 'NS';
+  finalizeGame(gameId, won);
   logLine(won ? 'You win the game! 🎉' : 'Opponents win the game.', won ? 'good' : 'bad');
   const reviewed = sessionReviews.filter(Boolean);
   let coachLine = '';
@@ -256,7 +281,9 @@ async function gameLoop() {
 function startNewGame() {
   game = new EuchreGame({ scoreTarget: 10, stickTheDealer: true, allowGoAlone: true });
   currentHint = null;
+  gameId = Date.now();
   sessionReviews.length = 0;
+  reviewCache.clear();
   clearLog();
   logLine('New game — first to 10 points.', 'sys');
   logHandStart();
@@ -276,6 +303,7 @@ function init() {
     ]);
   });
   document.getElementById('hint-btn').addEventListener('click', doHint);
+  document.getElementById('stats-btn').addEventListener('click', showStats);
   startNewGame();
 }
 

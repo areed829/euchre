@@ -281,6 +281,64 @@ export function renderReview(review) {
 }
 export function hideModal() { $('modal-backdrop').hidden = true; }
 
+// ---- Stats panel --------------------------------------------------------
+
+function accColor(v) {
+  if (v >= 80) return 'var(--good)';
+  if (v >= 60) return '#f2c94c';
+  return '#ff922b';
+}
+
+function trendChart(games) {
+  const pts = games.filter((g) => g.graded > 0);
+  if (pts.length < 2) return `<div class="rev-reason">Finish a couple of games to see your trend.</div>`;
+  const w = 600, h = 130, pad = 26;
+  const n = pts.length;
+  const x = (i) => pad + (i * (w - 2 * pad)) / (n - 1);
+  const y = (v) => h - pad - (v / 100) * (h - 2 * pad);
+  const line = pts.map((g, i) => `${x(i).toFixed(1)},${y(g.accuracy).toFixed(1)}`).join(' ');
+  const grid = [0, 50, 100].map((v) =>
+    `<line x1="${pad}" y1="${y(v)}" x2="${w - pad}" y2="${y(v)}" stroke="#2a323a"/>` +
+    `<text x="4" y="${y(v) + 4}" fill="#7a8693" font-size="10">${v}</text>`).join('');
+  const dots = pts.map((g, i) =>
+    `<circle cx="${x(i).toFixed(1)}" cy="${y(g.accuracy).toFixed(1)}" r="4" fill="${g.won === false ? 'var(--bad)' : g.won === true ? 'var(--good)' : 'var(--accent)'}"><title>Game ${i + 1}: ${g.accuracy}%${g.won === true ? ' (won)' : g.won === false ? ' (lost)' : ''}</title></circle>`).join('');
+  return `<svg viewBox="0 0 ${w} ${h}" class="trend-svg">${grid}` +
+    `<polyline points="${line}" fill="none" stroke="var(--accent)" stroke-width="2"/>${dots}</svg>`;
+}
+
+export function renderStats(s) {
+  if (!s.graded) {
+    return `<div class="review"><h2>Your stats</h2>
+      <p style="color:var(--muted)">No decisions graded yet. Every hand you play is reviewed automatically — play a few and your accuracy, weak spots, and trend over time will show up here.</p></div>`;
+  }
+  const cats = s.categories.map((c) => `
+    <div class="cat-row">
+      <span class="cat-name">${c.name}</span>
+      <div class="cat-bar"><div class="cat-fill" style="width:${c.accuracy}%;background:${accColor(c.accuracy)}"></div></div>
+      <span class="cat-val">${c.accuracy}%</span>
+      <span class="cat-n">${c.graded}</span>
+    </div>`).join('');
+  const leaks = s.leaks.slice(0, 6).map((l) =>
+    `<li><span class="leak-count">${l.count}×</span> ${l.label}</li>`).join('') || '<li class="rev-reason">No recurring leaks — nice.</li>';
+  const rec = s.record.finished ? `${s.record.wins}/${s.record.finished} games won` : 'no games finished yet';
+
+  return `<div class="review stats">
+    <h2>Your stats</h2>
+    <div class="review-sub">${s.hands} hands · ${s.graded} decisions graded · ${rec}</div>
+    <div class="stat-big">
+      <div><div class="stat-num" style="color:${accColor(s.accuracy)}">${s.accuracy}%</div><div class="stat-lbl">best-play accuracy</div></div>
+      <div><div class="stat-num">${s.avgLoss.toFixed(2)}</div><div class="stat-lbl">avg pts lost / decision</div></div>
+      <div><div class="stat-num">${s.counts.mistake + s.counts.blunder}</div><div class="stat-lbl">mistakes + blunders</div></div>
+    </div>
+    <h3 class="stat-h">Accuracy by decision type</h3>
+    <div class="cat-list">${cats}</div>
+    <h3 class="stat-h">Your improvement (per-game accuracy)</h3>
+    ${trendChart(s.games)}
+    <h3 class="stat-h">Most common leaks</h3>
+    <ul class="leak-list">${leaks}</ul>
+  </div>`;
+}
+
 // ---- Master render ------------------------------------------------------
 
 export function render(game, ctx = {}) {
