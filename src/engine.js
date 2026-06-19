@@ -185,7 +185,7 @@ export class EuchreGame {
   applyAction(action) {
     const decision = this.currentDecision();
     if (!decision) throw new Error('No decision pending');
-    this.logDecision(decision, action);
+    if (!this._silent) this.logDecision(decision, action);
 
     switch (decision.kind) {
       case 'bid1': return this._applyBid1(decision.seat, action);
@@ -295,7 +295,106 @@ export class EuchreGame {
       tricks: clone(this.tricksWonByTeam),
       result: clone(this.lastHandResult),
       scoresAfter: clone(this.scores),
+      // Deal kept so the coach can replay the hand exactly.
+      deal: { originalHands: clone(this.originalHands), kitty: clone(this.kitty), dealer: this.dealer, handNumber: this.handNumber },
     };
+  }
+
+  // ---- State export / import (for the Monte Carlo worker & cloning) ------
+
+  exportState() {
+    return {
+      options: this.options,
+      scores: clone(this.scores),
+      dealer: this.dealer,
+      handNumber: this.handNumber,
+      hands: clone(this.hands),
+      kitty: clone(this.kitty),
+      upCard: this.upCard ? clone(this.upCard) : null,
+      originalHands: clone(this.originalHands),
+      phase: this.phase,
+      bidder: this.bidder,
+      trump: this.trump,
+      maker: this.maker,
+      alone: this.alone,
+      sittingOut: this.sittingOut,
+      turnedDownCard: this.turnedDownCard ? clone(this.turnedDownCard) : null,
+      passCount: this.passCount,
+      currentTrick: clone(this.currentTrick),
+      leadSeat: this.leadSeat,
+      trickIndex: this.trickIndex,
+      trickHistory: clone(this.trickHistory),
+      tricksWonByTeam: clone(this.tricksWonByTeam),
+      tricksWonBySeat: clone(this.tricksWonBySeat),
+      lastHandResult: this.lastHandResult ? clone(this.lastHandResult) : null,
+      passedOut: this.passedOut,
+    };
+  }
+
+  /** Build a game from exported state. Defaults to silent (no decision logging). */
+  static fromState(state, { silent = true } = {}) {
+    const g = Object.create(EuchreGame.prototype);
+    g.options = state.options;
+    g.rng = mulberry32(1);        // unused during deterministic simulation
+    g._rngNoise = mulberry32(2);
+    g._silent = silent;
+    g.scores = clone(state.scores);
+    g.dealer = state.dealer;
+    g.handNumber = state.handNumber;
+    g.hands = clone(state.hands);
+    g.kitty = clone(state.kitty);
+    g.upCard = state.upCard ? clone(state.upCard) : null;
+    g.originalHands = clone(state.originalHands);
+    g.phase = state.phase;
+    g.bidder = state.bidder;
+    g.trump = state.trump;
+    g.maker = state.maker;
+    g.alone = state.alone;
+    g.sittingOut = state.sittingOut;
+    g.turnedDownCard = state.turnedDownCard ? clone(state.turnedDownCard) : null;
+    g.passCount = state.passCount;
+    g.currentTrick = clone(state.currentTrick);
+    g.leadSeat = state.leadSeat;
+    g.trickIndex = state.trickIndex;
+    g.trickHistory = clone(state.trickHistory);
+    g.tricksWonByTeam = clone(state.tricksWonByTeam);
+    g.tricksWonBySeat = clone(state.tricksWonBySeat);
+    g.lastHandResult = state.lastHandResult ? clone(state.lastHandResult) : null;
+    g.passedOut = state.passedOut;
+    g.history = [];
+    g.decisionLog = [];
+    return g;
+  }
+
+  /** A fast deep clone for simulation (silent, no logging). */
+  cloneForSim() {
+    return EuchreGame.fromState(this.exportState());
+  }
+
+  /** Deal a specific (non-random) hand — used by the coach to replay a hand. */
+  startSpecificHand(deal) {
+    this.handNumber = deal.handNumber ?? this.handNumber;
+    this.dealer = deal.dealer;
+    this.hands = clone(deal.originalHands);
+    this.originalHands = clone(deal.originalHands);
+    this.kitty = clone(deal.kitty);
+    this.upCard = this.kitty[0];
+    this.phase = 'bidding1';
+    this.bidder = nextSeat(this.dealer);
+    this.trump = null;
+    this.maker = null;
+    this.alone = false;
+    this.sittingOut = null;
+    this.turnedDownCard = null;
+    this.passCount = 0;
+    this.currentTrick = { plays: [] };
+    this.leadSeat = null;
+    this.trickIndex = 0;
+    this.trickHistory = [];
+    this.tricksWonByTeam = { NS: 0, EW: 0 };
+    this.tricksWonBySeat = [0, 0, 0, 0];
+    this.lastHandResult = null;
+    this.passedOut = false;
   }
 
   /** Advance to the next hand (rotate dealer). Call after phase === 'handOver'. */

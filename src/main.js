@@ -2,6 +2,7 @@
 
 import { EuchreGame } from './engine.js';
 import { aiAction, estimateTricks } from './ai/heuristic.js';
+import { mcMove } from './ai/mc-client.js';
 import {
   render, logLine, clearLog, showModal, hideModal,
 } from './ui.js';
@@ -74,6 +75,26 @@ async function applyAndAdvance(decision, action) {
     logLine(`<span class="who">${SEAT_SHORT[trick.winner]}</span> won the trick`, '');
     await delay(TRICK_PAUSE);
   }
+}
+
+// ---- AI move selection --------------------------------------------------
+
+async function aiDecide(decision) {
+  if (difficulty === 'hard') {
+    try {
+      // The Monte Carlo computation itself provides the "thinking" pause.
+      const [action] = await Promise.all([
+        mcMove(game.exportState(), { determinizations: 40 }),
+        delay(250),
+      ]);
+      if (action) return action;
+    } catch (err) {
+      console.warn('Monte Carlo failed, falling back to heuristic:', err);
+    }
+    return aiAction(game, decision, 'medium');
+  }
+  await delay(AI_DELAY);
+  return aiAction(game, decision, difficulty);
 }
 
 // ---- Hint (Phase 1: heuristic suggestion) -------------------------------
@@ -163,8 +184,7 @@ async function gameLoop() {
       await applyAndAdvance(decision, action);
     } else {
       draw({ enabled: false });
-      await delay(AI_DELAY);
-      const action = aiAction(game, decision, difficulty);
+      const action = await aiDecide(decision);
       logAction(decision, action);
       await applyAndAdvance(decision, action);
     }
