@@ -36,7 +36,7 @@ function backRow(n, vertical = false) {
 const SEAT_DOM = { 0: 'seat-south', 1: 'seat-west', 2: 'seat-north', 3: 'seat-east' };
 
 function renderSeats(game, decision) {
-  for (const seat of [1, 2, 3]) { // 0 = you, drawn as the real hand
+  for (const seat of [0, 1, 2, 3]) {
     const node = $(SEAT_DOM[seat]);
     node.innerHTML = '';
 
@@ -44,27 +44,46 @@ function renderSeats(game, decision) {
     label.className = 'seat-label';
     if (decision && decision.seat === seat) label.classList.add('active');
     if (game.maker === seat) label.classList.add('maker');
-    let txt = SEAT_SHORT[seat];
-    if (seat === game.dealer) txt += ' <span class="chip">🂠 deal</span>';
-    if (game.maker === seat) txt += ' <span class="chip">caller</span>';
-    label.innerHTML = txt;
+    if (seat === game.dealer) label.classList.add('is-dealer');
 
-    const tricks = document.createElement('div');
-    tricks.className = 'seat-tricks';
-    if (game.phase === 'play' || game.phase === 'handOver') {
-      tricks.textContent = `tricks: ${game.tricksWonBySeat[seat]}`;
+    const name = document.createElement('span');
+    name.textContent = SEAT_SHORT[seat];
+    label.appendChild(name);
+
+    if (game.maker === seat) {
+      const m = document.createElement('span');
+      m.className = 'chip';
+      m.textContent = 'caller';
+      label.appendChild(m);
     }
+    if (seat === game.dealer) {
+      const d = document.createElement('span');
+      d.className = 'dealer-btn';
+      d.textContent = 'D';
+      d.title = seat === 0 ? 'You are the dealer' : 'Dealer';
+      label.appendChild(d);
+    }
+    node.appendChild(label);
 
     if (seat === game.sittingOut) {
       const out = document.createElement('div');
       out.className = 'sitting-out';
       out.textContent = '(sitting out)';
-      node.append(label, out);
-    } else {
+      node.appendChild(out);
+      continue;
+    }
+
+    // Card backs for the other players; your own hand is shown below the table.
+    if (seat !== 0) {
       const vertical = seat === 1 || seat === 3;
-      const backs = backRow(game.hands[seat].length, vertical);
-      if (seat === 2) node.append(label, backs, tricks);
-      else node.append(label, backs, tricks);
+      node.appendChild(backRow(game.hands[seat].length, vertical));
+    }
+
+    if (game.phase === 'play' || game.phase === 'handOver') {
+      const tricks = document.createElement('div');
+      tricks.className = 'seat-tricks';
+      tricks.textContent = `tricks: ${game.tricksWonBySeat[seat]}`;
+      node.appendChild(tricks);
     }
   }
 }
