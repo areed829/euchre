@@ -231,8 +231,9 @@ export function clearLog() { $('log').innerHTML = ''; }
 
 // ---- Modal --------------------------------------------------------------
 
-export function showModal(html, actions = []) {
+export function showModal(html, actions = [], { wide = false } = {}) {
   const modal = $('modal');
+  modal.classList.toggle('wide', wide);
   modal.innerHTML = html;
   const row = document.createElement('div');
   row.className = 'modal-actions';
@@ -245,6 +246,38 @@ export function showModal(html, actions = []) {
   }
   if (actions.length) modal.appendChild(row);
   $('modal-backdrop').hidden = false;
+}
+
+/** Render a coaching review (from coach.reviewHand) into modal HTML. */
+export function renderReview(review) {
+  if (!review) {
+    return `<div class="review"><h2>Review unavailable</h2><p>Couldn't analyze this hand.</p></div>`;
+  }
+  const s = review.summary;
+  const c = s.counts;
+  const items = review.decisions.map((r) => {
+    const showBest = r.grade !== 'good';
+    const delta = showBest ? `<span class="rev-delta">−${r.loss.toFixed(2)}</span>` : '';
+    const head = `<div class="rev-head"><span class="badge ${r.grade}">${r.gradeLabel}</span>` +
+      `<span class="rev-ctx">${r.context}</span>${delta}</div>`;
+    const body = showBest
+      ? `<div class="rev-body">You ${r.chosenText} · <b>Best: ${r.bestText}</b></div>`
+      : `<div class="rev-body">You ${r.chosenText} <span class="pill">${r.sameAsBest ? 'best play' : 'fine'}</span></div>`;
+    const reason = (showBest && r.reason) ? `<div class="rev-reason">${r.reason}</div>` : '';
+    return `<li class="g-${r.grade}">${head}${body}${reason}</li>`;
+  }).join('');
+  const plural = (n) => (n === 1 ? '' : 's');
+  return `<div class="review">
+    <h2>Hand ${review.handNumber} review</h2>
+    <div class="review-sub">Trump ${SUIT_SYMBOLS[review.trump] || '—'} · ${review.result?.label || ''} · your accuracy ${s.accuracy}%</div>
+    <div class="review-summary">
+      <span class="pill" style="color:var(--good)">${c.good} good</span>
+      <span class="pill" style="color:#f2c94c">${c.minor} minor</span>
+      <span class="pill" style="color:#ff922b">${c.mistake} mistake${plural(c.mistake)}</span>
+      <span class="pill" style="color:var(--bad)">${c.blunder} blunder${plural(c.blunder)}</span>
+    </div>
+    <ul class="review-list">${items || '<li>No gradable decisions this hand.</li>'}</ul>
+  </div>`;
 }
 export function hideModal() { $('modal-backdrop').hidden = true; }
 

@@ -7,4 +7,4 @@ echo "Euchre Trainer — serving on $URL"
 echo "Close this window (or press Ctrl+C) to stop the server."
 # Open the browser shortly after the server starts.
 ( sleep 1; open "$URL" ) &
-python3 -m http.server "$PORT"
+python3 tools/serve.py "$PORT"

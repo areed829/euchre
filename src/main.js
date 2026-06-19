@@ -2,10 +2,11 @@
 
 import { EuchreGame } from './engine.js';
 import { aiAction, estimateTricks } from './ai/heuristic.js';
-import { mcMove } from './ai/mc-client.js';
+import { mcMove, mcEvaluate } from './ai/mc-client.js';
 import {
-  render, logLine, clearLog, showModal, hideModal,
+  render, logLine, clearLog, showModal, hideModal, renderReview,
 } from './ui.js';
+import { reviewHand, describeAction } from './coach.js';
 import { SUIT_SYMBOLS, SUIT_NAMES, cardLabel } from './cards.js';
 import { SEAT_SHORT } from './rules.js';
 
@@ -15,6 +16,7 @@ let difficulty = 'medium';
 let resolveHuman = null;
 let currentDecision = null;
 let currentHint = null;
+const sessionReviews = [];   // coaching reviews this game (for stats in Phase 4)
 
 const AI_DELAY = 600;
 const TRICK_PAUSE = 1150;
@@ -97,29 +99,57 @@ async function aiDecide(decision) {
   return aiAction(game, decision, difficulty);
 }
 
-// ---- Hint (Phase 1: heuristic suggestion) -------------------------------
+// ---- Hint (Monte Carlo, EV-ranked) --------------------------------------
 
-function doHint() {
+let hintBusy = false;
+
+async function doHint() {
   if (!resolveHuman || !currentDecision || currentDecision.seat !== HUMAN) {
     logLine('Hint is available on your turn.', 'sys');
     return;
   }
+  if (hintBusy) return;
+  hintBusy = true;
   const d = currentDecision;
-  const rec = aiAction(game, d, 'medium');
+  logLine('💡 <span class="spinner" style="width:11px;height:11px;border-width:2px"></span> analyzing…', 'sys');
 
+  let evals = null;
+  try {
+    ({ evals } = await mcEvaluate(game.exportState(), { determinizations: 60 }));
+  } catch (err) {
+    console.warn('Hint MC failed, using heuristic:', err);
+  }
+  hintBusy = false;
+
+  // The player may have already acted while we were thinking.
+  if (!resolveHuman || currentDecision !== d) return;
+
+  if (!evals) return heuristicHint(d);
+
+  const best = evals[0];
+  const runner = evals[1];
+  const gap = runner ? best.ev - runner.ev : null;
+  const conf = gap !== null ? (gap > 0.4 ? 'clearly best' : gap > 0.1 ? 'best' : 'narrowly best') : 'best';
+
+  if (d.kind === 'play' || d.kind === 'discard') {
+    currentHint = { card: best.action.card };
+    draw({ enabled: true });
+    logLine(`💡 <strong>${describeAction(best.action)}</strong> — ${conf} (EV ${best.ev.toFixed(2)}).`, 'sys');
+  } else {
+    logLine(`💡 <strong>${capitalize(describeAction(best.action))}</strong> — ${conf} (EV ${best.ev.toFixed(2)}).`, 'sys');
+  }
+}
+
+function capitalize(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
+
+// Fallback if the Monte Carlo worker is unavailable.
+function heuristicHint(d) {
+  const rec = aiAction(game, d, 'medium');
   if (d.kind === 'bid1' || d.kind === 'bid2') {
     const hand = game.hands[HUMAN];
-    if (rec.type === 'pass') {
-      const candidate = d.kind === 'bid1' ? game.upCard.suit : null;
-      const est = candidate ? estimateTricks(hand, candidate) : null;
-      logLine(`💡 Suggestion: <strong>Pass</strong>${est !== null ? ` — only ~${est.toFixed(1)} tricks in ${SUIT_NAMES[candidate]}.` : ' — no suit looks strong enough.'}`, 'sys');
-    } else {
-      const est = estimateTricks(hand, rec.suit);
-      logLine(`💡 Suggestion: <strong>${rec.type === 'orderUp' ? 'Order up' : 'Call'} ${SUIT_NAMES[rec.suit]}</strong>${rec.alone ? ' alone' : ''} — about ${est.toFixed(1)} expected tricks.`, 'sys');
-    }
-    return;
-  }
-  if (d.kind === 'play' || d.kind === 'discard') {
+    if (rec.type === 'pass') logLine('💡 Suggestion: <strong>Pass</strong> — no suit looks strong enough.', 'sys');
+    else logLine(`💡 Suggestion: <strong>${rec.type === 'orderUp' ? 'Order up' : 'Call'} ${SUIT_NAMES[rec.suit]}</strong>${rec.alone ? ' alone' : ''} (~${estimateTricks(hand, rec.suit).toFixed(1)} tricks).`, 'sys');
+  } else if (rec.card) {
     currentHint = { card: rec.card };
     draw({ enabled: true });
     logLine(`💡 Suggestion: ${d.kind === 'discard' ? 'discard' : 'play'} <strong>${cardLabel(rec.card)}</strong>.`, 'sys');
@@ -140,23 +170,53 @@ function handleHandOver() {
   const cls = r.passedOut ? 'sys' : (r.team === 'NS' ? 'good' : 'bad');
   logLine(handResultText(), cls);
   draw();
+  const handNumber = game.handNumber;
   return new Promise((res) => {
+    const cont = () => { hideModal(); res(); };
+    const actions = [{ label: 'Continue', onClick: cont }];
+    if (!r.passedOut) {
+      actions.unshift({ label: 'Review hand', cls: 'ghost', onClick: () => reviewThenContinue(handNumber, res) });
+    }
     showModal(
-      `<h2>Hand ${game.handNumber}</h2><p>${handResultText()}</p>
+      `<h2>Hand ${handNumber}</h2><p>${handResultText()}</p>
        <p>Score — You + Partner <strong>${game.scores.NS}</strong> · Opponents <strong>${game.scores.EW}</strong></p>`,
-      [{ label: 'Continue', onClick: () => { hideModal(); res(); } }],
+      actions,
     );
   });
+}
+
+async function reviewThenContinue(handNumber, resolve) {
+  showModal('<div class="review"><h2><span class="spinner"></span>Analyzing your hand…</h2><p style="color:var(--muted)">Running Monte Carlo on each of your decisions.</p></div>', [], { wide: true });
+  let review = null;
+  try {
+    review = await reviewHand(game, handNumber, mcEvaluate, { determinizations: 60 });
+    if (review) sessionReviews.push(review);
+  } catch (err) {
+    console.warn('Hand review failed:', err);
+  }
+  showModal(renderReview(review), [
+    { label: 'Continue', onClick: () => { hideModal(); resolve(); } },
+  ], { wide: true });
 }
 
 function handleGameOver() {
   const win = game.winningTeam();
   const won = win === 'NS';
   logLine(won ? 'You win the game! 🎉' : 'Opponents win the game.', won ? 'good' : 'bad');
+  const reviewed = sessionReviews.filter(Boolean);
+  let coachLine = '';
+  if (reviewed.length) {
+    const graded = reviewed.reduce((s, r) => s + r.summary.graded, 0);
+    const good = reviewed.reduce((s, r) => s + r.summary.counts.good, 0);
+    const acc = graded ? Math.round(100 * good / graded) : 100;
+    coachLine = `<p style="margin-top:12px">Across the hands you reviewed: <strong>${acc}%</strong> best-play decisions (${graded} graded).</p>`;
+  } else {
+    coachLine = `<p style="margin-top:12px;color:var(--muted)">Tip: use “Review hand” after each hand to see what you could’ve played better.</p>`;
+  }
   showModal(
     `<h2>${won ? 'You win! 🎉' : 'Opponents win'}</h2>
      <p>Final score — You + Partner <strong>${game.scores.NS}</strong> · Opponents <strong>${game.scores.EW}</strong></p>
-     <p style="margin-top:12px;color:var(--muted)">Coaching review & stats are coming in the next build.</p>`,
+     ${coachLine}`,
     [{ label: 'New Game', onClick: () => { hideModal(); startNewGame(); } }],
   );
 }
@@ -196,6 +256,7 @@ async function gameLoop() {
 function startNewGame() {
   game = new EuchreGame({ scoreTarget: 10, stickTheDealer: true, allowGoAlone: true });
   currentHint = null;
+  sessionReviews.length = 0;
   clearLog();
   logLine('New game — first to 10 points.', 'sys');
   logHandStart();

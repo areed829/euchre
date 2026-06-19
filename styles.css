@@ -253,3 +253,29 @@ select, .btn {
 
 .suit-S, .suit-C { color: var(--black); }
 .suit-H, .suit-D { color: var(--red); }
+
+/* ---- Coaching review ---- */
+.modal.wide { max-width: 680px; width: 92%; }
+.review h2 { margin-bottom: 4px; }
+.review-sub { color: var(--muted); font-size: 13px; margin-bottom: 12px; }
+.review-summary { display: flex; gap: 8px; font-size: 12px; margin-bottom: 12px; flex-wrap: wrap; }
+.pill { padding: 2px 9px; border-radius: 20px; background: var(--panel); border: 1px solid #2a323a; }
+.review-list { list-style: none; margin: 0; padding: 0; max-height: 54vh; overflow-y: auto; }
+.review-list li { border: 1px solid #2a323a; border-left-width: 4px; border-radius: 10px; padding: 9px 12px; margin-bottom: 8px; background: var(--panel); }
+.review-list li.g-good { border-left-color: var(--good); }
+.review-list li.g-minor { border-left-color: #f2c94c; }
+.review-list li.g-mistake { border-left-color: #ff922b; }
+.review-list li.g-blunder { border-left-color: var(--bad); }
+.rev-head { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.badge { padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 700; }
+.badge.good { background: rgba(81,207,102,.18); color: var(--good); }
+.badge.minor { background: rgba(242,201,76,.18); color: #f2c94c; }
+.badge.mistake { background: rgba(255,146,43,.18); color: #ff922b; }
+.badge.blunder { background: rgba(255,107,107,.18); color: var(--bad); }
+.rev-ctx { color: var(--muted); }
+.rev-delta { margin-left: auto; color: var(--bad); font-weight: 700; }
+.rev-body { font-size: 14px; margin-top: 6px; }
+.rev-body b { color: var(--gold); }
+.rev-reason { font-size: 13px; color: var(--muted); margin-top: 4px; line-height: 1.4; }
+.spinner { display: inline-block; width: 16px; height: 16px; border: 3px solid #3a424a; border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; vertical-align: middle; margin-right: 8px; }
+@keyframes spin { to { transform: rotate(360deg); } }

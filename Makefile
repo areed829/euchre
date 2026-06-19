@@ -24,11 +24,11 @@ help:
 run:
 	@echo "Euchre Trainer → $(URL)   (press Ctrl+C to stop)"
 	@( sleep 1; open "$(URL)" ) &
-	@python3 -m http.server $(PORT)
+	@python3 tools/serve.py $(PORT)
 
 serve:
 	@echo "Euchre Trainer serving at $(URL)   (press Ctrl+C to stop)"
-	@python3 -m http.server $(PORT)
+	@python3 tools/serve.py $(PORT)
 
 open:
 	@open "$(URL)"
